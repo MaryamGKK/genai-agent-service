@@ -1,0 +1,31 @@
+version: '3.8'
+
+services:
+  agent-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: genai-agent-service
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./agent.db:/app/agent.db
+      - ./logs:/app/logs
+    environment:
+      - LLM_API_KEY=${LLM_API_KEY}
+      - LLM_MODEL=${LLM_MODEL:-qwen/qwen3.6-27b}
+      - LLM_BASE_URL=${LLM_BASE_URL:-https://api.groq.com/openai/v1}
+      - DATABASE_URL=sqlite:///./agent.db
+      - MAX_ITERATIONS=10
+      - RATE_LIMIT_RPM=15
+      - TOOL_TIMEOUT_SECS=30
+      - SESSION_EXPIRY_HOURS=24
+      - ALLOW_WRITE_OPERATIONS=True
+      - DEBUG=False
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s

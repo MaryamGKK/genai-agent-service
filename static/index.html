@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GenAI Agent Service</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html[dir="rtl"] {
+            direction: rtl;
+            text-align: right;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            height: 100vh;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                grid-template-columns: 1fr;
+                height: auto;
+            }
+        }
+
+        .panel {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .panel-header {
+            background: #333;
+            color: white;
+            padding: 20px;
+            font-weight: 600;
+            font-size: 18px;
+        }
+
+        .panel-body {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .query-box {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .query-box textarea {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 14px;
+            font-family: monospace;
+            resize: vertical;
+            min-height: 100px;
+            transition: border-color 0.2s;
+        }
+
+        .query-box textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        button {
+            padding: 10px 20px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+
+        button:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255,255,255,.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 1s ease-in-out infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .answer-box {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            border-left: 4px solid #667eea;
+        }
+
+        .answer-box h3 {
+            margin-bottom: 10px;
+            color: #333;
+            font-size: 14px;
+            text-transform: uppercase;
+            opacity: 0.7;
+        }
+
+        .answer-box p {
+            color: #555;
+            line-height: 1.6;
+            word-wrap: break-word;
+        }
+
+        .error-box {
+            background: #fee;
+            border-left-color: #e74c3c;
+            color: #c0392b;
+        }
+
+        .info-box {
+            background: #f0f8ff;
+            border-left-color: #3498db;
+            color: #2c3e50;
+            font-size: 13px;
+        }
+
+        .trace-container {
+            margin-top: 20px;
+        }
+
+        .trace-item {
+            background: #f8f9fa;
+            padding: 12px;
+            margin-bottom: 10px;
+            border-radius: 6px;
+            border-left: 3px solid #667eea;
+            font-size: 13px;
+        }
+
+        .trace-item.error {
+            border-left-color: #e74c3c;
+            background: #fee;
+        }
+
+        .trace-item h4 {
+            margin-bottom: 8px;
+            color: #333;
+        }
+
+        .trace-details {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            font-family: monospace;
+            font-size: 12px;
+            color: #666;
+        }
+
+        .recent-runs {
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid #eee;
+        }
+
+        .run-item {
+            background: #f8f9fa;
+            padding: 10px;
+            margin-bottom: 8px;
+            border-radius: 6px;
+            font-size: 12px;
+            color: #666;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .run-item:hover {
+            background: #e8eef5;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 2px 8px;
+            background: #667eea;
+            color: white;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+            margin-left: 8px;
+        }
+
+        .badge.success {
+            background: #27ae60;
+        }
+
+        .badge.error {
+            background: #e74c3c;
+        }
+
+        .badge.running {
+            background: #f39c12;
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-top: 15px;
+            font-size: 12px;
+        }
+
+        .stat-item {
+            background: #f0f8ff;
+            padding: 10px;
+            border-radius: 6px;
+            text-align: center;
+            border: 1px solid #b3d9ff;
+        }
+
+        .stat-value {
+            font-size: 18px;
+            font-weight: 700;
+            color: #667eea;
+        }
+
+        .stat-label {
+            color: #666;
+            font-size: 11px;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Left Panel: Query -->
+        <div class="panel">
+            <div class="panel-header">🤖 Ask the Agent</div>
+            <div class="panel-body">
+                <div class="query-box">
+                    <textarea id="queryInput" placeholder="Ask me anything! Example: What's the status of order 1 and how much inventory does its product have?"></textarea>
+                    <button id="askBtn" onclick="askAgent()">
+                        <span id="btnText">Ask Agent</span>
+                    </button>
+                    <div id="sessionInfo" style="font-size: 12px; color: #666;"></div>
+                </div>
+
+                <div id="recentContainer" class="recent-runs" style="display: none;">
+                    <h4>Recent Runs</h4>
+                    <div id="recentRuns"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Panel: Response -->
+        <div class="panel">
+            <div class="panel-header">📊 Response & Trace</div>
+            <div class="panel-body">
+                <div id="responseContainer" style="display: none;">
+                    <div id="answerBox" class="answer-box"></div>
+                    <div id="statsBox" class="stats"></div>
+                    <div class="trace-container">
+                        <h4>Tool Calls (Trace)</h4>
+                        <div id="traceBox"></div>
+                    </div>
+                </div>
+                <div id="emptyState" style="text-align: center; color: #999; padding: 40px 20px;">
+                    <p>Responses will appear here</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let sessionId = localStorage.getItem('sessionId') || generateUUID();
+        localStorage.setItem('sessionId', sessionId);
+
+        function generateUUID() {
+            return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+                var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+                return v.toString(16);
+            });
+        }
+
+        function updateSessionInfo() {
+            document.getElementById('sessionInfo').innerHTML = `Session ID: <code>${sessionId.substring(0, 8)}...</code>`;
+        }
+
+        async function askAgent() {
+            const query = document.getElementById('queryInput').value.trim();
+            if (!query) {
+                alert('Please enter a query');
+                return;
+            }
+
+            const btn = document.getElementById('askBtn');
+            const btnText = document.getElementById('btnText');
+            btn.disabled = true;
+            btnText.innerHTML = '<span class="loading"></span> Asking...';
+
+            try {
+                const response = await fetch('/agent/', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ query, session_id: sessionId })
+                });
+
+                const data = await response.json();
+                displayResponse(data);
+                loadRecentRuns();
+            } catch (error) {
+                displayError('Network error: ' + error.message);
+            } finally {
+                btn.disabled = false;
+                btnText.innerHTML = 'Ask Agent';
+            }
+        }
+
+        function escapeHtml(str) {
+            const div = document.createElement('div');
+            div.textContent = str;
+            return div.innerHTML;
+        }
+
+        function renderMarkdown(text) {
+            if (!text) return '';
+            let html = escapeHtml(text);
+            html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+            html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
+            html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+            html = html.replace(/^\* (.+)$/gm, '<li>$1</li>');
+            html = html.replace(/(<li>.*<\/li>)/gs, '<ul>$1</ul>');
+            html = html.replace(/\n/g, '<br>');
+            return html;
+        }
+
+        function displayResponse(data) {
+            const container = document.getElementById('responseContainer');
+            const empty = document.getElementById('emptyState');
+
+            // Set language direction for Arabic variants
+            if (data.language && (data.language.code === 'ar' || data.language.code === 'ar-eg')) {
+                document.documentElement.setAttribute('dir', 'rtl');
+            } else {
+                document.documentElement.setAttribute('dir', 'ltr');
+            }
+
+            if (data.error) {
+                displayError(data.error);
+            } else {
+                const answerBox = document.getElementById('answerBox');
+                const langName = data.language ? escapeHtml(data.language.name) : '';
+                const langInfo = langName ? `<span style="font-size: 12px; opacity: 0.7; margin-left: 10px;">🌐 ${langName}</span>` : '';
+                const formattedAnswer = renderMarkdown(data.answer || 'No answer generated');
+                answerBox.innerHTML = `<h3>Answer ${langInfo}</h3><div>${formattedAnswer}</div>`;
+                answerBox.className = 'answer-box';
+
+                // Stats
+                const statsBox = document.getElementById('statsBox');
+                const tokens = data.tokens || { total: 0 };
+                const durationSec = data.duration_ms ? (data.duration_ms / 1000).toFixed(1) : '0.0';
+                const runIdShort = data.run_id ? data.run_id.substring(0, 8) : '???';
+                statsBox.innerHTML = `
+                    <div class="stat-item">
+                        <div class="stat-value">${data.iterations || 0}</div>
+                        <div class="stat-label">Iterations</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value">${durationSec}s</div>
+                        <div class="stat-label">Duration</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value">${tokens.total || 0}</div>
+                        <div class="stat-label">Tokens</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value">${escapeHtml(runIdShort)}...</div>
+                        <div class="stat-label">Run ID</div>
+                    </div>
+                `;
+
+                // Trace
+                const traceBox = document.getElementById('traceBox');
+                if (data.tool_trace && data.tool_trace.length > 0) {
+                    traceBox.innerHTML = data.tool_trace.map((step, i) => `
+                        <div class="trace-item ${step.error ? 'error' : ''}">
+                            <h4>Step ${step.step}: ${step.tool}</h4>
+                            <div class="trace-details">
+                                <div><strong>Input:</strong> ${JSON.stringify(step.input).substring(0, 50)}...</div>
+                                <div><strong>Duration:</strong> ${step.duration_ms}ms</div>
+                                <div><strong>Tokens:</strong> ${step.tokens.total}</div>
+                                ${step.error ? `<div><strong>Error:</strong> ${step.error}</div>` : ''}
+                            </div>
+                        </div>
+                    `).join('');
+                } else {
+                    traceBox.innerHTML = '<p style="color: #999;">No tool calls made</p>';
+                }
+
+                container.style.display = 'block';
+                empty.style.display = 'none';
+            }
+        }
+
+        function displayError(error) {
+            const answerBox = document.getElementById('answerBox');
+            answerBox.innerHTML = `<h3>Error</h3><p>${escapeHtml(error)}</p>`;
+            answerBox.className = 'answer-box error-box';
+            document.getElementById('responseContainer').style.display = 'block';
+            document.getElementById('emptyState').style.display = 'none';
+        }
+
+        async function loadRecentRuns() {
+            try {
+                const response = await fetch('/observe/recent?limit=5');
+                const data = await response.json();
+
+                if (data.runs && data.runs.length > 0) {
+                    const container = document.getElementById('recentContainer');
+                    const listHtml = data.runs.map(run => `
+                        <div class="run-item">
+                            <strong>${run.query.substring(0, 50)}...</strong>
+                            <span class="badge ${run.status}">${run.status}</span>
+                            <div style="margin-top: 5px; opacity: 0.7;">
+                                ${run.iterations} iterations • ${run.tokens} tokens
+                            </div>
+                        </div>
+                    `).join('');
+
+                    document.getElementById('recentRuns').innerHTML = listHtml;
+                    container.style.display = 'block';
+                }
+            } catch (error) {
+                console.error('Error loading recent runs:', error);
+            }
+        }
+
+        // Initialize
+        updateSessionInfo();
+        loadRecentRuns();
+        setInterval(loadRecentRuns, 5000);
+    </script>
+</body>
+</html>
