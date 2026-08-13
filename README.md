@@ -52,8 +52,9 @@ docker-compose up --build
 ### Option 2: Local Setup
 
 ```bash
-# 1. Install dependencies
-pip install -r requirements.txt
+# 1. Install dependencies (uv recommended for speed)
+uv pip install -r requirements.txt
+# Or with pip: pip install -r requirements.txt
 
 # 2. Create .env
 cp .env.example .env
@@ -641,6 +642,7 @@ agent_service/
 **SQLite for Simplicity**: Easy to seed, no external dependencies
 **Audit Logging**: Every action tracked for replay & debugging
 **Swappable LLM**: Change provider by updating 3 env vars (any OpenAI-compatible endpoint)
+**uv in Docker**: Uses [uv](https://github.com/astral-sh/uv) for fast dependency installation in container builds
 
 ---
 
