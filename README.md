@@ -509,25 +509,81 @@ All events logged to database:
 
 ## Architecture
 
-### High-level Flow
+### Architecture Diagram
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                        FastAPI Application                         │
+│                                                                     │
+│  ┌──────────┐    ┌──────────────────────────────────────────────┐   │
+│  │  Client   │───▶│  POST /agent/                               │   │
+│  │ (Web UI / │    │                                              │   │
+│  │   curl)   │    │  ┌─────────────┐   ┌────────────────────┐   │   │
+│  └──────────┘    │  │   Query     │──▶│  Safety Classifier │   │   │
+│                   │  │  Validator  │   │  (score 0-100)     │   │   │
+│  ┌──────────┐    │  └─────────────┘   └────────┬───────────┘   │   │
+│  │ GET      │    │                              │               │   │
+│  │ /health  │    │  ┌───────────────────────────▼────────────┐  │   │
+│  └──────────┘    │  │         Agent Orchestrator Loop        │  │   │
+│                   │  │         (max 10 iterations)            │  │   │
+│  ┌──────────┐    │  │                                        │  │   │
+│  │ GET      │    │  │  ┌──────────┐    ┌─────────────────┐  │  │   │
+│  │/observe/*│    │  │  │ Language │    │   Groq API      │  │  │   │
+│  └──────────┘    │  │  │ Detector │    │ (Qwen 3.6 27B)  │  │  │   │
+│                   │  │  │ EN/AR/EG │    │ OpenAI-compat.  │  │  │   │
+│                   │  │  └──────────┘    └───────┬─────────┘  │  │   │
+│                   │  │                          │             │  │   │
+│                   │  │              ┌───────────▼──────────┐  │  │   │
+│                   │  │              │   Tool Registry      │  │  │   │
+│                   │  │              │  (schemas from DB)   │  │  │   │
+│                   │  │              └───────────┬──────────┘  │  │   │
+│                   │  │                          │             │  │   │
+│                   │  │    ┌──────────┬──────────┼──────────┐  │  │   │
+│                   │  │    ▼          ▼          ▼          ▼  │  │   │
+│                   │  │ get_order  get_product list_cust. create │  │   │
+│                   │  │ _status   _inventory  _orders   _ticket │  │   │
+│                   │  │                                        │  │   │
+│                   │  └──────────────────┬─────────────────────┘  │   │
+│                   │                     │                        │   │
+│                   └─────────────────────┼────────────────────────┘   │
+│                                         │                            │
+│  ┌──────────────────────────────────────▼─────────────────────────┐ │
+│  │                      SQLite Database                           │ │
+│  │  ┌──────────┐ ┌──────────┐ ┌───────────┐ ┌─────────────────┐  │ │
+│  │  │ orders   │ │ products │ │ customers │ │ support_tickets │  │ │
+│  │  └──────────┘ └──────────┘ └───────────┘ └─────────────────┘  │ │
+│  │  ┌──────────┐ ┌──────────┐ ┌───────────┐ ┌─────────────────┐  │ │
+│  │  │agent_runs│ │  steps   │ │ audit_log │ │ tool_definitions│  │ │
+│  │  └──────────┘ └──────────┘ └───────────┘ └─────────────────┘  │ │
+│  └────────────────────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+### Request Flow
 
 ```
 User Query
     ↓
-Validation (QueryValidator)
+Rate Limiter (15 req/min per IP)
     ↓
-Safety Check (SafetyClassifier)
+Validation (QueryValidator) ──▶ reject if dangerous patterns
+    ↓
+Safety Check (SafetyClassifier) ──▶ reject if score ≥ 70
+    ↓
+Language Detection (EN / AR / AR-EG)
     ↓
 Agent Loop (max 10 iterations):
-  1. Call LLM (Groq) with available tools
-  2. Parse response for tool calls
-  3. Validate tool arguments
-  4. Execute tool via registry
-  5. Log step with tokens/latency
-  6. Feed results back to LLM
-  7. Continue or exit
+  1. Send messages + tools to LLM (Groq)
+  2. LLM returns tool_calls or final answer
+  3. If tool_calls:
+     a. Validate arguments (type, range, injection)
+     b. Execute tool via registry
+     c. Log step (tokens, latency, audit)
+     d. Append result to messages
+     e. Loop back to step 1
+  4. If final answer: return response with tool_trace
     ↓
-Final Answer + Full Trace
+Final Answer + Full Trace + Audit Trail
 ```
 
 ### Component Breakdown
